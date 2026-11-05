@@ -1,0 +1,67 @@
+[
+  {
+    "epoch": 1,
+    "train_average_loss": 0.8577272013500333,
+    "validation_subset_ap50_approx": 0.191444699504762,
+    "validation_subset_recall_at_50_iou": 0.22146588570523984,
+    "matched_ground_truth_faces": 1399,
+    "validation_ground_truth_faces": 6317,
+    "train_images": 1000,
+    "validation_images": 200,
+    "score_threshold": 0.5,
+    "iou_threshold": 0.5,
+    "elapsed_seconds": 279.52
+  },
+  {
+    "epoch": 2,
+    "train_average_loss": 0.7343768943883479,
+    "validation_subset_ap50_approx": 0.22342457158283663,
+    "validation_subset_recall_at_50_iou": 0.25360139306632895,
+    "matched_ground_truth_faces": 1602,
+    "validation_ground_truth_faces": 6317,
+    "train_images": 1000,
+    "validation_images": 200,
+    "score_threshold": 0.5,
+    "iou_threshold": 0.5,
+    "elapsed_seconds": 283.85
+  },
+  {
+    "epoch": 3,
+    "train_average_loss": 0.683864498289302,
+    "validation_subset_ap50_approx": 0.23423809743879437,
+    "validation_subset_recall_at_50_iou": 0.2627829665980687,
+    "matched_ground_truth_faces": 1660,
+    "validation_ground_truth_faces": 6317,
+    "train_images": 1000,
+    "validation_images": 200,
+    "score_threshold": 0.5,
+    "iou_threshold": 0.5,
+    "elapsed_seconds": 296.76
+  },
+  {
+    "epoch": 4,
+    "train_average_loss": 0.6291139874048531,
+    "validation_subset_ap50_approx": 0.25057091379024066,
+    "validation_subset_recall_at_50_iou": 0.2844704764920057,
+    "matched_ground_truth_faces": 1797,
+    "validation_ground_truth_faces": 6317,
+    "train_images": 1000,
+    "validation_images": 200,
+    "score_threshold": 0.5,
+    "iou_threshold": 0.5,
+    "elapsed_seconds": 296.08
+  },
+  {
+    "epoch": 5,
+    "train_average_loss": 0.6154886949639767,
+    "validation_subset_ap50_approx": 0.25157602637505944,
+    "validation_subset_recall_at_50_iou": 0.2855785974354915,
+    "matched_ground_truth_faces": 1804,
+    "validation_ground_truth_faces": 6317,
+    "train_images": 1000,
+    "validation_images": 200,
+    "score_threshold": 0.5,
+    "iou_threshold": 0.5,
+    "elapsed_seconds": 296.72
+  }
+]

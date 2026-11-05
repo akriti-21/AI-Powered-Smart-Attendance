@@ -1,0 +1,18 @@
+{
+  "model": "InsightFace Buffalo_L ArcFace recognition",
+  "dataset": "LFW 62 identities, corrected full-resolution crops",
+  "method": "Nearest training-image embedding by cosine similarity",
+  "preprocessing": "Aspect-ratio-preserving resize and padding to 112x112",
+  "training_embeddings": 2091,
+  "test_images_available": 506,
+  "test_images_evaluated": 506,
+  "training_embedding_failures": 0,
+  "test_embedding_failures": 0,
+  "correct_predictions": 502,
+  "test_accuracy_percent": 99.2095,
+  "macro_precision": 0.996494,
+  "macro_recall": 0.98871,
+  "macro_f1": 0.991906,
+  "elapsed_seconds": 68.87,
+  "warning": "Diagnostic embedding-crop evaluation; not the full detection pipeline. Split membership may differ from the original CNN split."
+}

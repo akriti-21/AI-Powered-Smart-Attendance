@@ -1,0 +1,16 @@
+{
+  "model": "InsightFace buffalo_l",
+  "dataset": "LFW 62-identity closed-set split",
+  "method": "Nearest training-image embedding by cosine similarity",
+  "train_images_used": 6,
+  "test_images_evaluated": 1,
+  "train_face_detection_failures": 2115,
+  "test_face_detection_failures": 450,
+  "correct_predictions": 0,
+  "test_accuracy": 0.0,
+  "test_accuracy_percent": 0.0,
+  "macro_precision": 0.0,
+  "macro_recall": 0.0,
+  "macro_f1": 0.0,
+  "elapsed_seconds": 108.8
+}

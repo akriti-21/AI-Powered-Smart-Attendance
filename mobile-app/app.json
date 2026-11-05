@@ -1,0 +1,36 @@
+{
+  "expo": {
+    "name": "Attendance System",
+    "slug": "attendance-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "This app uses the camera to take a class photo for attendance recognition.",
+        "NSPhotoLibraryUsageDescription": "This app needs photo library access to select a photo for attendance recognition.",
+        "NSPhotoLibraryAddUsageDescription": "This app saves exported attendance Excel files."
+      }
+    },
+    "android": {
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.RECORD_AUDIO"
+      ],
+      "package": "com.smartattendance.app"
+    },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Allow $(PRODUCT_NAME) to take a photo for attendance recognition.",
+          "photoPermission": "Allow $(PRODUCT_NAME) to pick a photo for attendance recognition."
+        }
+      ],
+      "expo-font"
+    ]
+  }
+}

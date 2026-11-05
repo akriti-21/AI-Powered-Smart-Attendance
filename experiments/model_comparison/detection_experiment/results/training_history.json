@@ -1,0 +1,15 @@
+[
+  {
+    "epoch": 1,
+    "train_average_loss": 1.1466958834975958,
+    "validation_subset_ap50_approx": 0.14805085577890836,
+    "validation_subset_recall_at_50_iou": 0.20016611295681064,
+    "matched_ground_truth_faces": 723,
+    "validation_ground_truth_faces": 3612,
+    "train_images": 200,
+    "validation_images": 100,
+    "score_threshold": 0.5,
+    "iou_threshold": 0.5,
+    "elapsed_seconds": 57.46
+  }
+]

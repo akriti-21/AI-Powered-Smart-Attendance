@@ -1,0 +1,57 @@
+{
+  "model": "EfficientNetB0",
+  "num_classes": 62,
+  "train_images": 2121,
+  "validation_images": 451,
+  "test_images": 451,
+  "epochs": 5,
+  "best_validation_accuracy": 0.5232815964523282,
+  "test_accuracy": 0.5277161862527716,
+  "test_precision_macro": 0.48531200610541797,
+  "test_recall_macro": 0.3516070846716008,
+  "test_f1_macro": 0.3728404952965392,
+  "test_loss": 2.119650224888668,
+  "checkpoint": "/Users/kumariakriti/Downloads/Smart-Attendance-main/experiments/model_comparison/checkpoints/efficientnetb0_best.pt",
+  "history": [
+    {
+      "epoch": 1,
+      "train_loss": 3.5863220147623425,
+      "train_accuracy": 0.19424799622819425,
+      "val_loss": 3.093011552108629,
+      "val_accuracy": 0.28159645232815966,
+      "seconds": 16.514325833995827
+    },
+    {
+      "epoch": 2,
+      "train_loss": 2.844323369704682,
+      "train_accuracy": 0.3333333333333333,
+      "val_loss": 2.690217747656575,
+      "val_accuracy": 0.3614190687361419,
+      "seconds": 11.712916292017326
+    },
+    {
+      "epoch": 3,
+      "train_loss": 2.380084424466246,
+      "train_accuracy": 0.4596888260254597,
+      "val_loss": 2.393683851954678,
+      "val_accuracy": 0.43902439024390244,
+      "seconds": 11.806300958007341
+    },
+    {
+      "epoch": 4,
+      "train_loss": 2.044037310372316,
+      "train_accuracy": 0.5634134842055634,
+      "val_loss": 2.2181267011456374,
+      "val_accuracy": 0.4700665188470067,
+      "seconds": 11.626990457996726
+    },
+    {
+      "epoch": 5,
+      "train_loss": 1.7856986200061962,
+      "train_accuracy": 0.6275341819896275,
+      "val_loss": 2.0632816130200404,
+      "val_accuracy": 0.5232815964523282,
+      "seconds": 11.502035624987911
+    }
+  ]
+}

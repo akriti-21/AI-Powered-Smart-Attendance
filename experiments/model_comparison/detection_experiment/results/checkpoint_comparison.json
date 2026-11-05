@@ -1,0 +1,18 @@
+{
+  "original_smoke": {
+    "approx_ap50": 0.16097662209213992,
+    "recall": 0.2160835839797372,
+    "matched_faces": 1365,
+    "ground_truth_faces": 6317,
+    "checkpoint_size_mb": 314.77,
+    "parameter_count": 41352281
+  },
+  "improved": {
+    "approx_ap50": 0.25161866115874343,
+    "recall": 0.2855785974354915,
+    "matched_faces": 1804,
+    "ground_truth_faces": 6317,
+    "checkpoint_size_mb": 314.77,
+    "parameter_count": 41352281
+  }
+}

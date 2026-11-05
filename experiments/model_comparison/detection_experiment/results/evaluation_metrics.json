@@ -1,0 +1,13 @@
+{
+  "checkpoint": "detection_experiment/checkpoints/fasterrcnn_wider_smoke_best.pth",
+  "validation_images": 100,
+  "ground_truth_faces": 3612,
+  "ap50_voc_style_all_scores": 0.16086845496335375,
+  "recall_at_iou_0_50_and_score_0_50": 0.2026578073089701,
+  "matched_ground_truth_faces_at_threshold": 732,
+  "predictions_above_score_threshold": 2502,
+  "iou_threshold": 0.5,
+  "recall_score_threshold": 0.5,
+  "max_detections_per_image": 300,
+  "note": "Subset evaluation; AP50 uses VOC-style interpolation, not the official WIDER FACE benchmark protocol."
+}

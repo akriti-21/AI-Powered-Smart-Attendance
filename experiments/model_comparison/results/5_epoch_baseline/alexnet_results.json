@@ -1,0 +1,57 @@
+{
+  "model": "AlexNet",
+  "num_classes": 62,
+  "train_images": 2121,
+  "validation_images": 451,
+  "test_images": 451,
+  "epochs": 5,
+  "best_validation_accuracy": 0.5587583148558758,
+  "test_accuracy": 0.5521064301552107,
+  "test_precision_macro": 0.4741514203453498,
+  "test_recall_macro": 0.4156900223432482,
+  "test_f1_macro": 0.4159021938801893,
+  "test_loss": 1.8222167740375663,
+  "checkpoint": "/Users/kumariakriti/Downloads/Smart-Attendance-main/experiments/model_comparison/checkpoints/alexnet_best.pt",
+  "history": [
+    {
+      "epoch": 1,
+      "train_loss": 3.29448962515112,
+      "train_accuracy": 0.2564827911362565,
+      "val_loss": 2.508374571932393,
+      "val_accuracy": 0.401330376940133,
+      "seconds": 4.030530791002093
+    },
+    {
+      "epoch": 2,
+      "train_loss": 2.1424243535033267,
+      "train_accuracy": 0.44035832154644033,
+      "val_loss": 2.1161913278361912,
+      "val_accuracy": 0.4634146341463415,
+      "seconds": 3.0892011249961797
+    },
+    {
+      "epoch": 3,
+      "train_loss": 1.705680141691777,
+      "train_accuracy": 0.5586987270155587,
+      "val_loss": 1.9898700924247437,
+      "val_accuracy": 0.49002217294900224,
+      "seconds": 3.062820292019751
+    },
+    {
+      "epoch": 4,
+      "train_loss": 1.5802903695805688,
+      "train_accuracy": 0.5586987270155587,
+      "val_loss": 1.7454731958668406,
+      "val_accuracy": 0.5587583148558758,
+      "seconds": 3.0156256670015864
+    },
+    {
+      "epoch": 5,
+      "train_loss": 1.4251585304034537,
+      "train_accuracy": 0.6049033474776049,
+      "val_loss": 1.7098637155841565,
+      "val_accuracy": 0.5365853658536586,
+      "seconds": 2.99269133299822
+    }
+  ]
+}
