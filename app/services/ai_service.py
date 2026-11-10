@@ -14,13 +14,35 @@ RECOGNITION_THRESHOLD = 0.50
 def recognize_classroom_image(
     image_path: str,
     threshold: float = RECOGNITION_THRESHOLD,
+    registration_numbers: list[str] | None = None,
 ) -> dict:
     image = cv2.imread(image_path)
 
     if image is None:
         raise ValueError(f"Could not read image at {image_path}")
 
-    return _engine.recognize_faces(image, threshold)
+    # No filter supplied: retain the existing all-students behavior.
+    if registration_numbers is None:
+        return _engine.recognize_faces(image, threshold)
+
+    # Build a restricted embedding dictionary for the selected class.
+    registered = {}
+
+    for registration_number in registration_numbers:
+        embedding = _engine.load_embedding(registration_number)
+
+        if embedding is None:
+            raise ValueError(
+                f"Embedding missing for student {registration_number}"
+            )
+
+        registered[registration_number] = embedding
+
+    return _engine.recognize_faces(
+        image,
+        threshold,
+        registered=registered,
+    )
 
 
 def register_student_face(
@@ -33,8 +55,6 @@ def register_student_face(
         raise ValueError(f"Could not read image at {image_path}")
 
     result = _engine.register_student(registration_number, image)
-    _engine.save_embedding(registration_number, result["embedding"])
-
     return result
 
 

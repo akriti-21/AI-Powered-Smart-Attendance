@@ -13,25 +13,44 @@ import logging
 import datetime
 import numpy as np
 from fastapi import FastAPI, UploadFile, File, Form, Depends, HTTPException
+from fastapi.staticfiles import StaticFiles
+import os
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.database import get_db, engine
+from app.database import get_db, engine, migrate_schema
 from app import models
 from app.schemas import AttendanceResponse, AttendanceRecordOut, StudentOut
-from app.services.ai_service import recognize_classroom_image, register_student_face
+from app.services.ai_service import (
+    recognize_classroom_image,
+    register_student_face,
+    delete_student_embedding,
+)
 from app.services.excel_service import generate_attendance_excel
 # for deletion of data
-from app.services.ai_service import recognize_classroom_image, register_student_face, delete_student_embedding
 
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("attendance_backend")
 
 models.Base.metadata.create_all(bind=engine)
+migrate_schema()
 
 app = FastAPI(title="Smart Attendance Backend")
+# Serve uploaded classroom images
+UPLOAD_ROOT = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    "uploads"
+)
+
+os.makedirs(UPLOAD_ROOT, exist_ok=True)
+
+app.mount(
+    "/uploads",
+    StaticFiles(directory=UPLOAD_ROOT),
+    name="uploads"
+)
 
 # ----------------------------------------------------------------------
 # Get all registered students
@@ -47,61 +66,107 @@ def get_students(db: Session = Depends(get_db)):
 def register_student(
     registration_number: str = Form(...),
     name: str = Form(...),
-    department: str = Form(None),
-    year: str = Form(None),
-    section: str = Form(None),
+    course_name: str = Form(...),
+    course_id: str = Form(...),
+    class_id: str = Form(...),
+    slot_no: str = Form(...),
     photo: UploadFile = File(...),
     db: Session = Depends(get_db),
 ):
+    import os
+    import tempfile
+
+    registration_number = registration_number.strip()
+    name = name.strip()
+    course_name = course_name.strip()
+    course_id = course_id.strip()
+    class_id = class_id.strip()
+    slot_no = slot_no.strip()
+
+    if not all([
+        registration_number, name, course_name,
+        course_id, class_id, slot_no
+    ]):
+        raise HTTPException(
+            status_code=400,
+            detail="All six registration fields are required."
+        )
+
     if photo.content_type not in ("image/jpeg", "image/png", "image/jpg"):
-        raise HTTPException(status_code=415, detail="Upload a JPEG or PNG image")
+        raise HTTPException(
+            status_code=415,
+            detail="Upload a JPEG or PNG image."
+        )
 
     existing = db.query(models.Student).filter(
         models.Student.registration_number == registration_number
     ).first()
+
     if existing:
-        raise HTTPException(status_code=409, detail="Student already registered")
+        raise HTTPException(
+            status_code=409,
+            detail="Student already registered."
+        )
 
     image_bytes = photo.file.read()
-    if len(image_bytes) == 0:
-        raise HTTPException(status_code=400, detail="Empty file uploaded")
 
-    temp_path = f"/tmp/{registration_number}.jpg"
-    with open(temp_path, "wb") as f:
-        f.write(image_bytes)
+    if not image_bytes:
+        raise HTTPException(status_code=400, detail="Empty file uploaded.")
+
+    temp_path = None
 
     try:
+        with tempfile.NamedTemporaryFile(
+            suffix=".jpg", delete=False
+        ) as temp_file:
+            temp_path = temp_file.name
+            temp_file.write(image_bytes)
+
         result = register_student_face(registration_number, temp_path)
-    except ValueError as e:
-        # No face / multiple faces / bad image - client's fault, not a 500
-        raise HTTPException(status_code=422, detail=str(e))
-    except Exception as e:
-        logger.error(f"AI registration failed for {registration_number}: {e}")
-        raise HTTPException(status_code=500, detail="Face registration failed")
 
-    try:
         student = models.Student(
             registration_number=registration_number,
             name=name,
-            department=department,
-            year=year,
-            section=section,
-            # Embedding is kept here too for reference/portability, even though
-            # the real matching source of truth is the .npy file on disk
-            # written by register_student_face() -> engine.save_embedding().
-            embedding=json.dumps(np.asarray(result["embedding"]).tolist()),
+            course_name=course_name,
+            course_id=course_id,
+            class_id=class_id,
+            slot_no=slot_no,
+            department=None,
+            year=None,
+            section=None,
+            embedding=json.dumps(np.asarray(result).tolist()),
         )
+
         db.add(student)
         db.commit()
         db.refresh(student)
-    except SQLAlchemyError as e:
+
+        logger.info("Registered student %s", registration_number)
+        return StudentOut.model_validate(student)
+
+    except ValueError as e:
         db.rollback()
-        logger.error(f"DB error during registration: {e}")
-        raise HTTPException(status_code=500, detail="Database error during registration")
+        raise HTTPException(status_code=422, detail=str(e))
 
-    logger.info(f"Registered student {registration_number}")
-    return StudentOut.model_validate(student)
+    except SQLAlchemyError:
+        db.rollback()
+        logger.exception("Database error during student registration")
+        raise HTTPException(
+            status_code=500,
+            detail="Database error during registration."
+        )
 
+    except Exception:
+        db.rollback()
+        logger.exception("Student registration failed")
+        raise HTTPException(
+            status_code=500,
+            detail="Face registration failed."
+        )
+
+    finally:
+        if temp_path and os.path.exists(temp_path):
+            os.remove(temp_path)
 
 # ----------------------------------------------------------------------
 # Core workflow: image -> AI recognition -> attendance
@@ -154,65 +219,147 @@ def recognize_only(image: UploadFile = File(...)):
         if temp_path and os.path.exists(temp_path):
             os.remove(temp_path)
 
+
 @app.post("/recognize-and-mark/", response_model=AttendanceResponse)
 def recognize_and_mark(
-    class_name: str = Form(...),
-    section: str = Form(None),
+    course_name: str = Form(...),
+    course_id: str = Form(...),
+    class_id: str = Form(...),
+    slot_no: str = Form(...),
     image: UploadFile = File(...),
     db: Session = Depends(get_db),
 ):
-    # --- Validate the upload first ---
-    if image.content_type not in ("image/jpeg", "image/png", "image/jpg"):
-        raise HTTPException(status_code=415, detail="Upload a JPEG or PNG image")
+    import os
+    import uuid
+
+    course_name = course_name.strip()
+    course_id = course_id.strip().upper()
+    class_id = class_id.strip().upper()
+    slot_no = slot_no.strip()
+
+    if not all([course_name, course_id, class_id, slot_no]):
+        raise HTTPException(
+            status_code=400,
+            detail="Course Name, Course ID, Class ID and Slot Number are required."
+        )
+
+    if image.content_type not in (
+        "image/jpeg",
+        "image/png",
+        "image/jpg"
+    ):
+        raise HTTPException(
+            status_code=415,
+            detail="Upload a JPEG or PNG image."
+        )
 
     image_bytes = image.file.read()
-    if len(image_bytes) == 0:
-        raise HTTPException(status_code=400, detail="Empty file uploaded")
 
-    temp_path = f"/tmp/classroom_{datetime.datetime.utcnow().timestamp()}.jpg"
-    with open(temp_path, "wb") as f:
-        f.write(image_bytes)
-
-
-    
-    # --- Run real recognition ---
-    try:
-        result = recognize_classroom_image(temp_path)
-        logger.info(
-            "MOBILE DIAGNOSTIC: faces=%s recognized=%s unknown=%s",
-            result["face_count"],
-            result["recognized_students"],
-            len(result["unknown_faces"]),
-        )
-    except Exception as e:
-        logger.error(f"AI recognition failed: {e}")
+    if not image_bytes:
         raise HTTPException(
-            status_code=422,
-            detail="Could not process image - ensure it's a valid photo"
+            status_code=400,
+            detail="Empty file uploaded."
         )
 
-    recognized_reg_numbers = {r["registration_number"] for r in result["recognized_students"]}
-    confidence_by_reg = {r["registration_number"]: r["confidence"] for r in result["recognized_students"]}
-    unknown_count = len(result["unknown_faces"])
+    # Fetch students belonging to the exact course, class and slot.
+    all_students = db.query(models.Student).filter(
+        models.Student.course_name == course_name,
+        models.Student.course_id == course_id,
+        models.Student.class_id == class_id,
+        models.Student.slot_no == slot_no,
+    ).all()
 
-    # --- Save attendance ---
+    if not all_students:
+        raise HTTPException(
+            status_code=404,
+            detail="No students registered for this course, class and slot."
+        )
+
+    # Create permanent classroom image directory.
+    upload_dir = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "uploads",
+        "classroom_images"
+    )
+
+    os.makedirs(upload_dir, exist_ok=True)
+
+    extension = (
+        ".png"
+        if image.content_type == "image/png"
+        else ".jpg"
+    )
+
+    filename = f"classroom_{uuid.uuid4().hex}{extension}"
+    saved_image_path = os.path.join(upload_dir, filename)
+
+    image_saved = False
+
     try:
-        all_students = db.query(models.Student).all()
-        if section:
-            all_students = [s for s in all_students if s.section == section]
+        # Save the original classroom image.
+        with open(saved_image_path, "wb") as image_file:
+            image_file.write(image_bytes)
 
-        session = models.ClassSession(class_name=class_name, section=section)
+        image_saved = True
+
+        # Keep a relative path in the database.
+        image_path = os.path.relpath(
+            saved_image_path,
+            os.path.dirname(os.path.abspath(__file__))
+        )
+
+        eligible_numbers = [
+            student.registration_number
+            for student in all_students
+        ]
+
+        # Run face recognition only against selected-slot students.
+        result = recognize_classroom_image(
+            saved_image_path,
+            registration_numbers=eligible_numbers
+        )
+
+        eligible_set = set(eligible_numbers)
+
+        recognized_reg_numbers = {
+            item["registration_number"]
+            for item in result["recognized_students"]
+        } & eligible_set
+
+        confidence_by_reg = {
+            item["registration_number"]: item["confidence"]
+            for item in result["recognized_students"]
+            if item["registration_number"] in eligible_set
+        }
+
+        unknown_count = len(result["unknown_faces"])
+
+        # Create attendance session.
+        session = models.ClassSession(
+            class_name=class_id,
+            section=None,
+            course_name=course_name,
+            course_id=course_id,
+            class_id=class_id,
+            slot_no=slot_no,
+            image_path=image_path,
+        )
+
         db.add(session)
-        db.flush()  # get session.id without committing yet
+        db.flush()
 
         records = []
+
+        # Mark every registered student in this slot.
         for student in all_students:
             if student.registration_number in recognized_reg_numbers:
                 record = models.AttendanceRecord(
                     student_id=student.id,
                     class_session_id=session.id,
                     status=models.AttendanceStatus.PRESENT,
-                    similarity_score=confidence_by_reg[student.registration_number],
+                    similarity_score=confidence_by_reg.get(
+                        student.registration_number
+                    ),
                 )
             else:
                 record = models.AttendanceRecord(
@@ -220,32 +367,62 @@ def recognize_and_mark(
                     class_session_id=session.id,
                     status=models.AttendanceStatus.ABSENT,
                 )
+
             db.add(record)
             records.append(record)
 
         db.commit()
         db.refresh(session)
 
-    except SQLAlchemyError as e:
+        present_count = len(recognized_reg_numbers)
+        absent_count = len(all_students) - present_count
+
+        logger.info(
+            "Session %s: Course %s, Class %s, Slot %s: %s present, %s absent",
+            session.id,
+            course_id,
+            class_id,
+            slot_no,
+            present_count,
+            absent_count,
+        )
+
+        return AttendanceResponse(
+            class_session_id=session.id,
+            session_date=session.session_date,
+            course_name=session.course_name,
+            course_id=session.course_id,
+            class_id=session.class_id,
+            slot_no=session.slot_no,
+            image_path=session.image_path,
+
+            present_count=present_count,
+            absent_count=absent_count,
+            unknown_faces_detected=unknown_count,
+            records=[
+                AttendanceRecordOut.model_validate(record)
+                for record in records
+            ],
+        )
+
+    except HTTPException:
         db.rollback()
-        logger.error(f"DB error during attendance marking: {e}")
-        raise HTTPException(status_code=500, detail="Database error while saving attendance")
+        if image_saved and os.path.exists(saved_image_path):
+            os.remove(saved_image_path)
+        raise
 
-    present_count = len(recognized_reg_numbers)
-    absent_count = len(all_students) - present_count
-    logger.info(
-        f"Session {session.id}: {present_count} present, {absent_count} absent, "
-        f"{unknown_count} unknown faces (of {result['face_count']} detected)"
-    )
+    except Exception:
+        db.rollback()
 
-    return AttendanceResponse(
-        class_session_id=session.id,
-        session_date=session.session_date,
-        present_count=present_count,
-        absent_count=absent_count,
-        unknown_faces_detected=unknown_count,
-        records=[AttendanceRecordOut.model_validate(r) for r in records],
-    )
+        if image_saved and os.path.exists(saved_image_path):
+            os.remove(saved_image_path)
+
+        logger.exception("Attendance marking failed")
+
+        raise HTTPException(
+            status_code=422,
+            detail="Could not process image or save attendance."
+        )
 
 # ----------------------------------------------------------------------
 # Attendance Sessions List
@@ -282,15 +459,21 @@ def get_attendance_sessions(db: Session = Depends(get_db)):
         )
 
         result.append(
-            {
-                "id": session.id,
-                "class_name": session.class_name,
-                "section": session.section,
-                "date": session.session_date,
-                "total": len(records),
-                "present": present_count,
-                "absent": absent_count,
-            }
+                {
+                   "id": session.id,
+                    "class_name": session.class_name,
+                   "section": session.section,
+                   "course_name": session.course_name,
+                   "course_id": session.course_id,
+                   "class_id": session.class_id,
+                   "slot_no": session.slot_no,
+                   "image_path": session.image_path,
+                   "date": session.session_date,
+                   "total": len(records),
+                   "present": present_count,
+                    "absent": absent_count,
+                    
+                }
         )
 
     return result
@@ -316,6 +499,11 @@ def get_attendance_history(class_session_id: int, db: Session = Depends(get_db))
     return AttendanceResponse(
         class_session_id=session.id,
         session_date=session.session_date,
+        course_name=session.course_name,
+        course_id=session.course_id,
+        class_id=session.class_id,
+        slot_no=session.slot_no,
+        image_path=session.image_path,
         present_count=present_count,
         absent_count=absent_count,
         unknown_faces_detected=0,  # not persisted per-session; add a column if needed later

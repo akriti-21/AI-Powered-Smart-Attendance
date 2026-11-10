@@ -1,3 +1,4 @@
+
 import React, { useCallback, useState } from 'react';
 
 import {
@@ -12,9 +13,9 @@ import {
 
 import { Ionicons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system';
-import * as Sharing from 'expo-sharing';
+import * as IntentLauncher from 'expo-intent-launcher';
 
-import api, { getApiErrorMessage } from '../api';
+import { getDatabase } from '../database';
 
 export default function HistoryScreen() {
   const [sessions, setSessions] = useState([]);
@@ -23,23 +24,66 @@ export default function HistoryScreen() {
   const [detailsLoading, setDetailsLoading] = useState(null);
 
   // ---------------------------------------------------------
-  // Load attendance sessions
+  // Load attendance sessions from SQLite
   // ---------------------------------------------------------
+
   const loadHistory = useCallback(async () => {
     setLoading(true);
 
     try {
-      const res = await api.get('/attendance/sessions');
+      const db = await getDatabase();
 
-      setSessions(Array.isArray(res.data) ? res.data : []);
-    } catch (err) {
-      console.log('HISTORY ERROR:', err);
-      console.log('HISTORY MESSAGE:', err.message);
-      console.log('HISTORY RESPONSE:', err.response?.data);
+      const result = await db.getAllAsync(`
+        SELECT
+          s.id,
+          s.class_name,
+          s.section,
+          s.course_name,
+          s.course_id,
+          s.class_id,
+          s.slot_no,
+          s.created_at,
+          COUNT(r.id) AS total,
+          COALESCE(
+            SUM(
+              CASE
+                WHEN LOWER(r.status) = 'present' THEN 1
+                ELSE 0
+              END
+            ), 0
+          ) AS present,
+          COALESCE(
+            SUM(
+              CASE
+                WHEN LOWER(r.status) = 'absent' THEN 1
+                ELSE 0
+              END
+            ), 0
+          ) AS absent
+        FROM attendance_sessions s
+        LEFT JOIN attendance_records r
+          ON s.id = r.session_id
+        GROUP BY s.id
+        ORDER BY s.id DESC;
+      `);
+
+      const formattedSessions = result.map((item) => ({
+        ...item,
+        date: item.created_at,
+        total: Number(item.total || 0),
+        present: Number(item.present || 0),
+        absent: Number(item.absent || 0),
+      }));
+
+      setSessions(formattedSessions);
+
+      console.log('OFFLINE HISTORY LOADED:', formattedSessions);
+    } catch (error) {
+      console.error('OFFLINE HISTORY ERROR:', error);
 
       Alert.alert(
         'Error',
-        getApiErrorMessage(err, 'Failed to load attendance sessions')
+        'Could not load attendance history from the local database.'
       );
     } finally {
       setLoading(false);
@@ -53,6 +97,7 @@ export default function HistoryScreen() {
   // ---------------------------------------------------------
   // Format date
   // ---------------------------------------------------------
+
   const formatDate = (dateString) => {
     if (!dateString) {
       return 'Unknown date';
@@ -68,46 +113,50 @@ export default function HistoryScreen() {
   };
 
   // ---------------------------------------------------------
-  // View attendance details
+  // View attendance details from SQLite
   // ---------------------------------------------------------
+
   const viewDetails = async (session) => {
     setDetailsLoading(session.id);
 
     try {
-      const res = await api.get(
-        `/attendance/history/${session.id}`
+      const db = await getDatabase();
+
+      const records = await db.getAllAsync(
+        `SELECT
+           registration_number,
+           student_name,
+           status,
+           similarity_score
+         FROM attendance_records
+         WHERE session_id = ?
+         ORDER BY id ASC`,
+        [session.id]
       );
 
-      const data = res.data;
-
-      const records = Array.isArray(data.records)
-        ? data.records
-        : [];
-
       const present = records.filter(
-        (record) => record.status === 'present'
+        (record) =>
+          String(record.status).toLowerCase() === 'present'
       ).length;
 
       const absent = records.filter(
-        (record) => record.status === 'absent'
+        (record) =>
+          String(record.status).toLowerCase() === 'absent'
       ).length;
 
       const recordText = records
         .map((record) => {
           const registrationNumber =
-            record.registration_number ||
-            record.student?.registration_number ||
-            'Unknown';
+            record.registration_number || 'Unknown';
 
           const name =
-            record.student_name ||
-            record.name ||
-            record.student?.name ||
-            'Unknown';
+            record.student_name || 'Unknown';
 
           const similarity =
             record.similarity_score != null
-              ? ` (${(record.similarity_score * 100).toFixed(1)}%)`
+              ? ` (${(
+                  Number(record.similarity_score) * 100
+                ).toFixed(1)}%)`
               : '';
 
           return `${registrationNumber} - ${name}: ${record.status}${similarity}`;
@@ -116,18 +165,22 @@ export default function HistoryScreen() {
 
       Alert.alert(
         `Session #${session.id}`,
-        `Present: ${present}\nAbsent: ${absent}\n\n${recordText}`,
+        `Course: ${session.course_name || 'N/A'}\n` +
+          `Course ID: ${session.course_id || 'N/A'}\n` +
+          `Class ID: ${
+            session.class_id || session.class_name || 'N/A'
+          }\n\n` +
+          `Present: ${present}\n` +
+          `Absent: ${absent}\n\n` +
+          `${recordText || 'No attendance records found.'}`,
         [{ text: 'Close' }]
       );
-    } catch (err) {
-      console.log('DETAILS ERROR:', err);
+    } catch (error) {
+      console.error('OFFLINE DETAILS ERROR:', error);
 
       Alert.alert(
         'Error',
-        getApiErrorMessage(
-          err,
-          'Failed to load attendance details'
-        )
+        'Could not load attendance details from the local database.'
       );
     } finally {
       setDetailsLoading(null);
@@ -135,57 +188,83 @@ export default function HistoryScreen() {
   };
 
   // ---------------------------------------------------------
-  // Export Excel
+  // Export attendance report locally as CSV
   // ---------------------------------------------------------
-  const exportExcel = async (session) => {
-    const sessionId = session.id;
 
-    setExportingId(sessionId);
+  const exportExcel = async (session) => {
+    setExportingId(session.id);
 
     try {
-      const fileUri =
-        `${FileSystem.documentDirectory}` +
-        `attendance_${sessionId}.xlsx`;
+      const db = await getDatabase();
 
-      const downloadUrl =
-        `${api.defaults.baseURL}/attendance/report/${sessionId}`;
-
-      console.log('Downloading Excel:', downloadUrl);
-
-      const result = await FileSystem.downloadAsync(
-        downloadUrl,
-        fileUri
+      const records = await db.getAllAsync(
+        `SELECT
+           registration_number,
+           student_name,
+           status,
+           similarity_score
+         FROM attendance_records
+         WHERE session_id = ?
+         ORDER BY id ASC`,
+        [session.id]
       );
 
-      if (result.status !== 200) {
-        throw new Error(
-          `Download failed with status ${result.status}`
-        );
-      }
+      const escapeCSV = (value) => {
+        const safeValue = String(value ?? '').replace(/"/g, '""');
+        return `"${safeValue}"`;
+      };
 
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(result.uri, {
-          mimeType:
-            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-          dialogTitle:
-            `Session ${sessionId} attendance`,
-        });
-      } else {
-        Alert.alert(
-          'Downloaded',
-          `Excel file saved to:\n${result.uri}`
-        );
-      }
-    } catch (err) {
-      console.log('EXPORT ERROR:', err);
-      console.log('EXPORT RESPONSE:', err.response?.data);
+      const rows = [
+        [
+          'Registration Number',
+          'Student Name',
+          'Status',
+          'Similarity Score',
+        ],
+        ...records.map((record) => [
+          record.registration_number,
+          record.student_name,
+          record.status,
+          record.similarity_score ?? '',
+        ]),
+      ];
+
+      const csvContent = rows
+        .map((row) => row.map(escapeCSV).join(','))
+        .join('\n');
+
+      const fileUri =
+        `${FileSystem.documentDirectory}attendance_${session.id}.csv`;
+
+      await FileSystem.writeAsStringAsync(
+        fileUri,
+        csvContent,
+        {
+          encoding: FileSystem.EncodingType.UTF8,
+        }
+      );
+
+      console.log('OFFLINE REPORT CREATED:', fileUri);
+
+      const contentUri =
+        await FileSystem.getContentUriAsync(fileUri);
+
+      await IntentLauncher.startActivityAsync(
+        'android.intent.action.VIEW',
+        {
+          data: contentUri,
+          flags: 1,
+          type: 'text/csv',
+        }
+      );
+
+      console.log('OFFLINE REPORT OPENED');
+    } catch (error) {
+      console.error('OFFLINE EXPORT ERROR:', error);
 
       Alert.alert(
         'Export failed',
-        getApiErrorMessage(
-          err,
-          'Could not download attendance report'
-        )
+        'Could not create or open the attendance report. Please check whether an app capable of opening CSV files is installed.'
       );
     } finally {
       setExportingId(null);
@@ -193,11 +272,11 @@ export default function HistoryScreen() {
   };
 
   // ---------------------------------------------------------
-  // Render one session
+  // Render one attendance session
   // ---------------------------------------------------------
+
   const renderItem = ({ item }) => (
     <View style={styles.card}>
-
       <View style={styles.cardHeader}>
         <View style={styles.titleContainer}>
           <Text style={styles.sessionTitle}>
@@ -218,18 +297,19 @@ export default function HistoryScreen() {
 
       <View style={styles.classInfo}>
         <Text style={styles.className}>
-          {item.class_name || 'Class'}
+          {item.course_name || 'Course not available'}
         </Text>
 
-        {item.section ? (
-          <Text style={styles.section}>
-            Section {item.section}
-          </Text>
-        ) : null}
+        <Text style={styles.section}>
+          Course ID: {item.course_id || 'N/A'}
+        </Text>
+
+        <Text style={styles.section}>
+          Class ID: {item.class_id || item.class_name || 'N/A'}
+        </Text>
       </View>
 
       <View style={styles.statsContainer}>
-
         <View style={styles.statBox}>
           <Text style={styles.statNumber}>
             {item.total}
@@ -269,11 +349,9 @@ export default function HistoryScreen() {
             Absent
           </Text>
         </View>
-
       </View>
 
       <View style={styles.actions}>
-
         <TouchableOpacity
           style={styles.detailsButton}
           onPress={() => viewDetails(item)}
@@ -323,18 +401,16 @@ export default function HistoryScreen() {
             </>
           )}
         </TouchableOpacity>
-
       </View>
-
     </View>
   );
 
   // ---------------------------------------------------------
   // Screen
   // ---------------------------------------------------------
+
   return (
     <View style={styles.container}>
-
       <View style={styles.header}>
         <Text style={styles.sectionTitle}>
           Attendance Sessions
@@ -375,7 +451,6 @@ export default function HistoryScreen() {
           data={sessions}
           keyExtractor={(item) => String(item.id)}
           renderItem={renderItem}
-
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <Ionicons
@@ -394,7 +469,6 @@ export default function HistoryScreen() {
               </Text>
             </View>
           }
-
           contentContainerStyle={[
             styles.listContent,
             sessions.length === 0 &&
@@ -402,7 +476,6 @@ export default function HistoryScreen() {
           ]}
         />
       )}
-
     </View>
   );
 }

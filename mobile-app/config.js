@@ -13,4 +13,4 @@
  *  network, then replace <YOUR_LAN_IP> below, e.g.:
  *     export const BASE_URL = 'http://172.18.146.26:8000';
  */
-export const BASE_URL = 'http://' + '127.0.0.1' + ':8000';
+export const BASE_URL = 'http://127.0.0.1:8000';

@@ -16,6 +16,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 
 import RegisterScreen from './screens/RegisterScreen';
+import CoursesScreen from './screens/CoursesScreen';
 
 import AttendanceScreen from './screens/AttendanceScreen';
 
@@ -27,6 +28,7 @@ const Tab = createBottomTabNavigator();
 
 const TAB_ICONS = {
   Register: 'person-add',
+  Courses: 'book',
   Attendance: 'camera',
   History: 'time',
 };
@@ -83,6 +85,7 @@ export default function App() {
         })}
       >
         <Tab.Screen name="Register" component={RegisterScreen} />
+        <Tab.Screen name="Courses" component={CoursesScreen} />
         <Tab.Screen name="Attendance" component={AttendanceScreen} />
         <Tab.Screen name="History" component={HistoryScreen} />
       </Tab.Navigator>
